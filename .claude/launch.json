@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "braccio-sim",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["/Users/abdull/Documents/Uni/Braccio_sim/.claude/serve.js"],
+      "port": 8765
+    }
+  ]
+}
