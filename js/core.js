@@ -23,8 +23,9 @@
       d1: 71.5, // Tisch -> Schulterachse
       a2: 125.0, // Schulter -> Ellbogen
       a3: 125.0, // Ellbogen -> Handgelenk
-      lTcp: 175.0, // Handgelenk -> TCP (Greifmitte)
-      lTip: 192.5, // Handgelenk -> Fingerspitze
+      d5: 130.0, // Handgelenk -> Greiferflansch (KS5 der STL-Geometrie)
+      lTcp: 180.0, // Handgelenk -> TCP (Greifmitte) = d5 + 50 mm
+      lTip: 186.0, // Handgelenk -> Fingerspitze
     },
     // Grenzen wie in Braccio::ServoMovement()
     limits: [

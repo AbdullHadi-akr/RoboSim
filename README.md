@@ -24,7 +24,7 @@ Code, Wegpunkte, Zonen und Einstellungen werden im Browser gespeichert (localSto
 | **Kalibrierung** | verborgene Gelenk-Offsets simulieren, Messpunkte an Referenzmarkern oder per „Lasertracker“ aufnehmen, Offsets per Least Squares schätzen, Kompensation anwenden |
 | **Arbeitsraum** | erreichbaren und unzulässigen Arbeitsraum als 2D-Schnitt und in 3D anzeigen; Sperrzonen und Arbeitsbereiche; Tisch- und Selbstkollision; Geschwindigkeitsgrenze; Reaktion *warnen / verlangsamen / Not-Halt*; Ereignisprotokoll |
 | **Pick'n'Place** | Szenarien: Einzelwürfel, Farbsortierung, Stapeln, Förderband mit Lichtschranken; Greifen, Ablegen, Stapeln; Kontrolle der Zielbereiche |
-| **Modell** | Geometrie anpassen, DH-Tabelle, Transformationsmatrizen T₀ⁱ, Servo-Parameter, Haltemomente, Export der Kinematik als MATLAB-Skript |
+| **Modell** | Geometrie anpassen, DH-Tabelle, Transformationsmatrizen T₀ⁱ, Servo-Parameter, Haltemomente, Export der Kinematik als MATLAB-Skript, Umschalten zwischen STL-Geometrie und vereinfachtem Modell |
 
 Unten zeigt ein **Scope** Soll- und Ist-Werte der Gelenke sowie die TCP-Geschwindigkeit.
 Oben links blendet ein HUD TCP-Pose und Gelenkwinkel ein.
@@ -69,8 +69,10 @@ DH-Parameter (T = Rot_z(θ)·Trans_z(d)·Trans_x(a)·Rot_x(α)):
 | 4 | 180° − M4 | 0 | 0 | 90° |
 | 5 | M5 | L_TCP | 0 | 0 |
 
-Standardgeometrie: d1 = 71,5 mm, a2 = a3 = 125 mm, L_TCP = 175 mm (Greifmitte), L_Spitze = 192,5 mm.
-Die Werte sind Richtwerte und lassen sich im Bereich *Modell* an einen konkreten Roboter anpassen.
+Standardgeometrie: d1 = 71,5 mm, a2 = a3 = 125 mm, d5 = 130 mm (Greiferflansch), L_TCP = 180 mm (Greifmitte), L_Spitze = 186 mm.
+Die Werte lassen sich im Bereich *Modell* an einen konkreten Roboter anpassen.
+
+Die 3D-Darstellung nutzt die STL-Geometrie des Braccio (reduzierte Meshes in `js/meshes.js`, je Glied im zugehörigen DH-Koordinatensystem; der Greifer sitzt auf KS5 mit d5 = 130 mm, die Finger öffnen und schließen mit M6).
 Alle Servos auf 90° heißt: Arm steht senkrecht. M5 = 90° heißt: Die Greiferbacken öffnen quer zur Armebene.
 
 **Grenzen des Modells:**
@@ -89,5 +91,6 @@ js/trajectory.js    Trajektorienplanung
 js/sim.js           Simulationskern: Zeit, Servos, Greifen, Objekte, Förderband, Überwachung
 js/arduino.js       Arduino→JavaScript-Übersetzer, Laufzeit, Beispielprogramme
 js/view3d.js        3D-Darstellung
+js/meshes.js        STL-Geometrie des Roboters (Base, Link 1–4, Greifer)
 js/ui*.js           Oberfläche (je Bereich eine Datei)
 ```

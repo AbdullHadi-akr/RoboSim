@@ -674,7 +674,7 @@ Servo gripper;
 const float D1 = 71.5;    // Tisch -> Schulterachse
 const float A2 = 125.0;   // Oberarm (Schulter -> Ellbogen)
 const float A3 = 125.0;   // Unterarm (Ellbogen -> Handgelenk)
-const float L4 = 175.0;   // Handgelenk -> TCP (Greifmitte)
+const float L4 = 180.0;   // Handgelenk -> TCP (Greifmitte)
 
 int q[4];  // Ergebnis der IK: M1..M4 in Grad
 

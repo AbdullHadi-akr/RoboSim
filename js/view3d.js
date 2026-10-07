@@ -184,11 +184,135 @@
     };
   }
 
+
+  // ------------------------------------------------------------------
+  // Roboter-Modell aus STL-Geometrie (js/meshes.js)
+  // ------------------------------------------------------------------
+  let meshGeo = null;
+  function b64(s, T) {
+    const bin = atob(s);
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new T(u8.buffer);
+  }
+  function meshGeometries() {
+    if (meshGeo) return meshGeo;
+    const M = window.BS_MESHES;
+    const mk = (pos, idx) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      g.computeBoundingSphere();
+      return g;
+    };
+    const simple = (k) => mk(b64(M[k].v, Float32Array), b64(M[k].i, Uint16Array));
+    const gv = b64(M.grip.v, Float32Array);
+    meshGeo = {
+      base: simple('base'),
+      link1: simple('link1'),
+      arm: simple('arm'),
+      wrist: simple('wrist'),
+      gripBody: mk(gv, b64(M.grip.iBody, Uint16Array)),
+      gripL: mk(gv, b64(M.grip.iL, Uint16Array)),
+      gripR: mk(gv, b64(M.grip.iR, Uint16Array)),
+      w0: M.grip.w0,
+    };
+    return meshGeo;
+  }
+
+  function buildMeshRobot(isGhost) {
+    const G = meshGeometries();
+    const root = new THREE.Group();
+    const ghostMat = new THREE.MeshBasicMaterial({ color: 0x4dabf7, transparent: true, opacity: 0.22, depthWrite: false });
+    const orange = () => std(0xff5500, { roughness: 0.55, flatShading: true });
+    const M = isGhost
+      ? { base: ghostMat, l1: ghostMat, up: ghostMat, fore: ghostMat, hand: ghostMat, grip: ghostMat }
+      : { base: orange(), l1: orange(), up: orange(), fore: orange(), hand: orange(), grip: std(0xaaaa7f, { roughness: 0.6, flatShading: true }) };
+    const F = [];
+    for (let i = 0; i < 6; i++) {
+      const grp = new THREE.Group();
+      grp.matrixAutoUpdate = false;
+      root.add(grp);
+      F.push(grp);
+      if (!isGhost) addFrameHelpers(grp, i);
+    }
+    const add = (geo, mat, parent) => {
+      const m = new THREE.Mesh(geo, mat);
+      if (!isGhost) m.castShadow = m.receiveShadow = true;
+      parent.add(m);
+      return m;
+    };
+    add(G.base, M.base, F[0]);
+    add(G.link1, M.l1, F[1]);
+    add(G.arm, M.up, F[2]);
+    add(G.arm, M.fore, F[3]);
+    add(G.wrist, M.hand, F[4]);
+    // Greiferflansch: KS5 der STL-Geometrie (d5), gegenüber dem TCP-System um −90° um z gedreht
+    const flange = new THREE.Group();
+    flange.matrixAutoUpdate = false;
+    root.add(flange);
+    add(G.gripBody, M.grip, flange);
+    const fl = new THREE.Group(),
+      fr = new THREE.Group();
+    add(G.gripL, M.grip, fl);
+    add(G.gripR, M.grip, fr);
+    flange.add(fl, fr);
+    let tcpMarker = null;
+    if (!isGhost) {
+      tcpMarker = mesh(new THREE.SphereGeometry(4.5, 18, 12), new THREE.MeshBasicMaterial({ color: 0xff7a00, depthTest: false }), F[5], [0, 0, 0], null, false);
+      tcpMarker.renderOrder = 6;
+    }
+    const off = new THREE.Matrix4(),
+      tmp = new THREE.Matrix4();
+    return {
+      root,
+      F,
+      tcpMarker,
+      mats: M,
+      setPose(Fr, jaw) {
+        for (let i = 0; i < 6; i++) setMatrixRowMajor(F[i], Fr[i]);
+        off.makeRotationZ(-Math.PI / 2).setPosition(0, 0, C.geom.d5 - C.geom.lTcp);
+        tmp.copy(F[5].matrix).multiply(off);
+        flange.matrix.copy(tmp);
+        flange.matrixWorldNeedsUpdate = true;
+        const d = (jaw - G.w0) / 2;
+        fl.position.y = -d;
+        fr.position.y = d;
+      },
+      highlight(state) {
+        if (isGhost) return;
+        const col = (s) => (s === 'viol' ? 0x9c0000 : s === 'warn' ? 0x7a4a00 : 0x000000);
+        M.up.emissive.setHex(col(state['Oberarm']));
+        M.fore.emissive.setHex(col(state['Unterarm']));
+        M.hand.emissive.setHex(col(state['Greifer'] || state['Greiferfinger']));
+        M.grip.emissive.setHex(col(state['Greifer'] || state['Greiferfinger']));
+      },
+    };
+  }
+
+  function addFrameHelpers(grp, i) {
+    const ax = new THREE.AxesHelper(i === 5 ? 45 : 55);
+    ax.visible = false;
+    ax.renderOrder = 5;
+    ax.material.depthTest = false;
+    grp.add(ax);
+    grp.userData.axes = ax;
+    const lb = label(i === 0 ? 'KS0' : i === 5 ? 'KS5 (TCP)' : 'KS' + i, '#fff', 13);
+    lb.position.set(14, 14, 14);
+    lb.visible = false;
+    grp.add(lb);
+    grp.userData.label = lb;
+  }
+
+  V.useStl = BS.store.get('useStl', true);
+  V.hasStl = () => !!window.BS_MESHES;
+
   V.rebuildRobot = function () {
     if (robot) worldGroup.remove(robot.root);
     if (ghost) worldGroup.remove(ghost.root);
-    robot = buildRobot(false);
-    ghost = buildRobot(true);
+    const stl = V.useStl && V.hasStl();
+    robot = stl ? buildMeshRobot(false) : buildRobot(false);
+    ghost = stl ? buildMeshRobot(true) : buildRobot(true);
     ghost.root.visible = false;
     worldGroup.add(robot.root);
     worldGroup.add(ghost.root);
@@ -696,6 +820,8 @@
       worldGroup.add(wsHull);
     }
   };
+
+  V.cam = () => ({ camera, controls });
 
   V.applyShow = function () {
     applyFrameVisibility();

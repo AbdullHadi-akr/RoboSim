@@ -115,6 +115,7 @@ end
         ['d1', 'd1'],
         ['a2', 'a2'],
         ['a3', 'a3'],
+        ['d5', 'd5'],
         ['lTcp', 'L_TCP'],
         ['lTip', 'L_Spitze'],
       ]) {
@@ -126,6 +127,13 @@ end
           'Geometrie [mm]',
           geomRow,
           U.row(
+            U.chk('STL-Geometrie anzeigen (sonst vereinfachtes Modell)', BS.view.useStl, (v) => {
+              BS.view.useStl = v;
+              BS.store.set('useStl', v);
+              BS.view.rebuildRobot();
+            })
+          ),
+          U.row(
             U.btn('Übernehmen', () => {
               for (const k in inputs) {
                 const v = parseFloat(inputs[k].value);
@@ -136,13 +144,13 @@ end
               BS.toast('Geometrie übernommen', 'ok');
             }, 'primary'),
             U.btn('Standardwerte', () => {
-              Object.assign(g, { d1: 71.5, a2: 125, a3: 125, lTcp: 175, lTip: 192.5 });
+              Object.assign(g, { d1: 71.5, a2: 125, a3: 125, d5: 130, lTcp: 180, lTip: 186 });
               for (const k in inputs) inputs[k].value = g[k];
               BS.store.set('geom', g);
               BS.view.rebuildRobot();
             })
           ),
-          U.hint('d1: Tisch → Schulterachse · a2: Schulter → Ellbogen · a3: Ellbogen → Handgelenk · L_TCP: Handgelenk → Greifmitte (TCP) · L_Spitze: Handgelenk → Fingerspitze. Für das Labor die Werte am realen Roboter nachmessen!')
+          U.hint('d1: Tisch → Schulterachse · a2: Schulter → Ellbogen · a3: Ellbogen → Handgelenk · d5: Handgelenk → Greiferflansch · L_TCP: Handgelenk → Greifmitte (TCP) · L_Spitze: Handgelenk → Fingerspitze. Die Werte am realen Roboter nachmessen und hier eintragen.')
         )
       );
       el.appendChild(

@@ -68,7 +68,7 @@
       if (a) psi = autoPsi = a.psi;
     }
     sols = BS.kin.ik(target(), psi, C.geom, { m1: BS.sim.cmd[0] });
-    BS.view.setIkTarget(target(), psi, true);
+    BS.view.setIkTarget(target(), psi, U.active === 'ik');
     const t = h('table', { class: 'tbl' });
     t.appendChild(h('tr', null, h('th', null, 'Lösung'), C.short.slice(0, 4).map((n, i) => h('th', { class: 'num', style: { color: C.colors[i] } }, n)), h('th', null, 'Status'), h('th')));
     for (const s of sols) {
