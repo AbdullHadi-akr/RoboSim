@@ -156,7 +156,8 @@
         const tgt = { x: P.x + (Q.x - P.x) * p.s, y: P.y + (Q.y - P.y) * p.s, z: P.z + (Q.z - P.z) * p.s };
         const psi = P.psi + BS.wrap180(Q.psi - P.psi) * p.s;
         const ref = lastLin && lastLin.seg === s ? lastLin.q : A;
-        const sol = BS.kin.ikBest(tgt, psi, g, ref);
+        // nur stetig anschließende Lösungen (kein Umklappen vorne/hinten an Gelenkgrenzen)
+        const sol = BS.kin.ikStep(tgt, psi, g, ref);
         if (sol) {
           for (let j = 0; j < 4; j++) out.q[j] = sol.m[j];
         } else {
@@ -169,7 +170,7 @@
           out.qdd[j] = (B[j] - A[j]) * p.sdd;
         }
         out.cart = tgt;
-        lastLin = { seg: s, q: out.q.slice() };
+        if (sol) lastLin = { seg: s, q: out.q.slice() };
         return out;
       }
       for (let j = 0; j < 6; j++) {
@@ -217,7 +218,7 @@
         QDD[j][k] = b > a ? (QD[j][b] - QD[j][a]) / (T[b] - T[a]) : 0;
       }
     }
-    if (linFail) errors.push(`LIN: ${linFail} Abtastpunkte nicht erreichbar (Arbeitsraum/Gelenkgrenzen) – dort wurde im Gelenkraum interpoliert.`);
+    if (linFail) errors.push(`LIN: ${linFail} Abtastpunkte nicht stetig erreichbar (Arbeitsraum/Gelenkgrenzen/Konfigurationswechsel) – dort wurde im Gelenkraum interpoliert.`);
     // Gelenkgrenzen & Geschwindigkeiten
     const vmax = BS.config.servo.vmax;
     const peaks = [];

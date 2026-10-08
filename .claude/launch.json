@@ -4,7 +4,7 @@
     {
       "name": "braccio-sim",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["/Users/abdull/Documents/Uni/Braccio_sim/.claude/serve.js"],
+      "runtimeArgs": [".claude/serve.js"],
       "port": 8765
     }
   ]

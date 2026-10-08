@@ -72,7 +72,9 @@ DH-Parameter (T = Rot_z(θ)·Trans_z(d)·Trans_x(a)·Rot_x(α)):
 Standardgeometrie: d1 = 71,5 mm, a2 = a3 = 125 mm, d5 = 130 mm (Greiferflansch), L_TCP = 180 mm (Greifmitte), L_Spitze = 186 mm.
 Die Werte lassen sich im Bereich *Modell* an einen konkreten Roboter anpassen.
 
-Die 3D-Darstellung nutzt die STL-Geometrie des Braccio (reduzierte Meshes in `js/meshes.js`, je Glied im zugehörigen DH-Koordinatensystem; der Greifer sitzt auf KS5 mit d5 = 130 mm, die Finger öffnen und schließen mit M6).
+Die 3D-Darstellung nutzt die STL-Geometrie des Braccio (reduzierte Meshes in `js/meshes.js`, je Glied im zugehörigen DH-Koordinatensystem; der Greifer sitzt auf KS5 mit d5 = 130 mm, die Finger öffnen und schließen mit M6). Der Greifer ist als Getriebe animiert: Servo-Zahnrad und Gegenrad (1:1, gegensinnig) treiben je Seite ein Viergelenk aus Kurbel (30 mm), Schwinge (30 mm) und Fingerträger (25 mm); die Getriebestellung wird aus der Greiferöffnung berechnet (`BS.kin.gripLinkage`).
+
+Die Meshes entsprechen den Visuals des MATLAB-Modells `Braccio_robot.mat` (`rigidBodyTree`, `*_reduced.stl`). Für die Darstellung werden die Normalen mit Kantenwinkel geglättet, Servos (schwarz) und Abtriebswellen (weiß) sind als eigene Teile abgetrennt. `js/details.js` ergänzt Achsbolzen, Basisschrauben, Gelenkstifte im Greifer, die Steuerung (Arduino Uno mit Braccio-Shield hinter der Basis) und die 3-adrigen Servokabel, die entlang des Arms zu den Steckern M1–M6 laufen und der Bewegung folgen. Die Zusatzteile sind rein visuell und gehen nicht in Kollisions- oder Arbeitsraumprüfung ein.
 Alle Servos auf 90° heißt: Arm steht senkrecht. M5 = 90° heißt: Die Greiferbacken öffnen quer zur Armebene.
 
 **Grenzen des Modells:**
@@ -91,6 +93,7 @@ js/trajectory.js    Trajektorienplanung
 js/sim.js           Simulationskern: Zeit, Servos, Greifen, Objekte, Förderband, Überwachung
 js/arduino.js       Arduino→JavaScript-Übersetzer, Laufzeit, Beispielprogramme
 js/view3d.js        3D-Darstellung
-js/meshes.js        STL-Geometrie des Roboters (Base, Link 1–4, Greifer)
+js/meshes.js        STL-Geometrie des Roboters (Base, Link 1–4, Greifer; Servos und Greifergetriebe als eigene Teile)
+js/details.js       Zusatzdetails der 3D-Darstellung (Schrauben, Steuerung, Servokabel)
 js/ui*.js           Oberfläche (je Bereich eine Datei)
 ```

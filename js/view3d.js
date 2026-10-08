@@ -22,7 +22,7 @@
   // Hilfen
   // ------------------------------------------------------------------
   function std(color, opts) {
-    return new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.65, metalness: 0.08 }, opts || {}));
+    return new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.65, metalness: 0.08, envMapIntensity: 0.35 }, opts || {}));
   }
   function mesh(geo, mat, parent, pos, rot, shadow) {
     const m = new THREE.Mesh(geo, mat);
@@ -198,23 +198,41 @@
   function meshGeometries() {
     if (meshGeo) return meshGeo;
     const M = window.BS_MESHES;
+    // Normalen glätten, Kanten über 35° bleiben scharf (statt Flat-Shading der reduzierten STL-Meshes)
+    const crease = THREE.BufferGeometryUtils && THREE.BufferGeometryUtils.toCreasedNormals;
     const mk = (pos, idx) => {
-      const g = new THREE.BufferGeometry();
+      let g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       g.setIndex(new THREE.BufferAttribute(idx, 1));
+      if (crease) g = crease(g, (35 * Math.PI) / 180);
+      else g.computeVertexNormals();
       g.computeBoundingSphere();
       return g;
     };
-    const simple = (k) => mk(b64(M[k].v, Float32Array), b64(M[k].i, Uint16Array));
+    const part = (k, ik) => mk(b64(M[k].v, Float32Array), b64(M[k][ik || 'i'], Uint16Array));
     const gv = b64(M.grip.v, Float32Array);
+    const gp = (k) => mk(gv, b64(M.grip[k], Uint16Array));
     meshGeo = {
-      base: simple('base'),
-      link1: simple('link1'),
-      arm: simple('arm'),
-      wrist: simple('wrist'),
-      gripBody: mk(gv, b64(M.grip.iBody, Uint16Array)),
-      gripL: mk(gv, b64(M.grip.iL, Uint16Array)),
-      gripR: mk(gv, b64(M.grip.iR, Uint16Array)),
+      base: part('base'),
+      link1: part('link1'),
+      arm: part('arm'),
+      armServo: part('arm', 'iServo'),
+      armShaft: part('arm', 'iShaft'),
+      wrist: part('wrist'),
+      wristServo: part('wrist', 'iServo'),
+      wristShaft: part('wrist', 'iShaft'),
+      gripServo: gp('iServo'),
+      gripBody: gp('iBody'),
+      gripL: gp('iL'),
+      gripR: gp('iR'),
+      // Greifergetriebe: Zahnrad mit Kurbel, Schwinge, Fingerträger je Seite
+      gearL: gp('iGearL'),
+      gearR: gp('iGearR'),
+      linkL: gp('iLinkL'),
+      linkR: gp('iLinkR'),
+      carL: gp('iCarL'),
+      carR: gp('iCarR'),
+      link: M.grip.link,
       w0: M.grip.w0,
     };
     return meshGeo;
@@ -224,10 +242,22 @@
     const G = meshGeometries();
     const root = new THREE.Group();
     const ghostMat = new THREE.MeshBasicMaterial({ color: 0x4dabf7, transparent: true, opacity: 0.22, depthWrite: false });
-    const orange = () => std(0xff5500, { roughness: 0.55, flatShading: true });
+    // Kunststoffteile mit leichtem Klarlack-Glanz, Servos schwarz, Abtriebswellen weiß
+    const plastic = (color, o) =>
+      new THREE.MeshPhysicalMaterial(Object.assign({ color, roughness: 0.42, metalness: 0, clearcoat: 0.35, clearcoatRoughness: 0.35, envMapIntensity: 0.45 }, o || {}));
+    const orange = () => plastic(0xff5500);
     const M = isGhost
-      ? { base: ghostMat, l1: ghostMat, up: ghostMat, fore: ghostMat, hand: ghostMat, grip: ghostMat }
-      : { base: orange(), l1: orange(), up: orange(), fore: orange(), hand: orange(), grip: std(0xaaaa7f, { roughness: 0.6, flatShading: true }) };
+      ? { base: ghostMat, l1: ghostMat, up: ghostMat, fore: ghostMat, hand: ghostMat, grip: ghostMat, servo: ghostMat, shaft: ghostMat }
+      : {
+          base: orange(),
+          l1: orange(),
+          up: orange(),
+          fore: orange(),
+          hand: orange(),
+          grip: plastic(0xaaaa7f, { roughness: 0.5, clearcoat: 0.15 }),
+          servo: plastic(0x1c1d20, { roughness: 0.5, clearcoat: 0.2 }),
+          shaft: plastic(0xf1f1ee, { roughness: 0.35, clearcoat: 0.1 }),
+        };
     const F = [];
     for (let i = 0; i < 6; i++) {
       const grp = new THREE.Group();
@@ -247,16 +277,34 @@
     add(G.arm, M.up, F[2]);
     add(G.arm, M.fore, F[3]);
     add(G.wrist, M.hand, F[4]);
+    // Servos (Ellbogen M3 im Oberarm, Handgelenk M4 im Unterarm, Handrotation M5) mit Abtriebswelle
+    for (const i of [2, 3]) {
+      add(G.armServo, M.servo, F[i]);
+      add(G.armShaft, M.shaft, F[i]);
+    }
+    add(G.wristServo, M.servo, F[4]);
+    add(G.wristShaft, M.shaft, F[4]);
     // Greiferflansch: KS5 der STL-Geometrie (d5), gegenüber dem TCP-System um −90° um z gedreht
     const flange = new THREE.Group();
     flange.matrixAutoUpdate = false;
     root.add(flange);
     add(G.gripBody, M.grip, flange);
-    const fl = new THREE.Group(),
-      fr = new THREE.Group();
-    add(G.gripL, M.grip, fl);
-    add(G.gripR, M.grip, fr);
-    flange.add(fl, fr);
+    add(G.gripServo, M.servo, flange);
+    // Drehgelenk um die x-Achse des Flanschs im Punkt (y, z); die Meshes liegen in Flanschkoordinaten
+    const pivot = (pt, geos) => {
+      const grp = new THREE.Group();
+      grp.position.set(0, pt[0], pt[1]);
+      for (const geo of geos) add(geo, M.grip, grp).position.set(0, -pt[0], -pt[1]);
+      flange.add(grp);
+      return grp;
+    };
+    const L = G.link;
+    const gear = { L: pivot(L.gL, [G.gearL]), R: pivot(L.gR, [G.gearR]) };
+    const rocker = { L: pivot(L.aL, [G.linkL]), R: pivot(L.aR, [G.linkR]) };
+    // Fingerträger samt Finger: Bezugspunkt = Koppelpunkt c der Kurbel
+    const carrier = { L: pivot(L.cL, [G.carL, G.gripL]), R: pivot(L.cR, [G.carR, G.gripR]) };
+    // Schrauben, Gelenkstifte und Servokabel (js/details.js)
+    const details = !isGhost && BS.details ? BS.details.buildRobotDetails({ root, F, flange, carrier, link: L }) : null;
     let tcpMarker = null;
     if (!isGhost) {
       tcpMarker = mesh(new THREE.SphereGeometry(4.5, 18, 12), new THREE.MeshBasicMaterial({ color: 0xff7a00, depthTest: false }), F[5], [0, 0, 0], null, false);
@@ -264,20 +312,30 @@
     }
     const off = new THREE.Matrix4(),
       tmp = new THREE.Matrix4();
+    let lastJaw = null;
     return {
       root,
       F,
       tcpMarker,
       mats: M,
+      details,
       setPose(Fr, jaw) {
         for (let i = 0; i < 6; i++) setMatrixRowMajor(F[i], Fr[i]);
         off.makeRotationZ(-Math.PI / 2).setPosition(0, 0, C.geom.d5 - C.geom.lTcp);
         tmp.copy(F[5].matrix).multiply(off);
         flange.matrix.copy(tmp);
         flange.matrixWorldNeedsUpdate = true;
-        const d = (jaw - G.w0) / 2;
-        fl.position.y = -d;
-        fr.position.y = d;
+        if (details) details.update();
+        if (jaw !== lastJaw) {
+          lastJaw = jaw;
+          const s = BS.kin.gripLinkage(L, jaw);
+          for (const k of ['L', 'R']) {
+            gear[k].rotation.x = s[k].crank;
+            rocker[k].rotation.x = s[k].rocker;
+            carrier[k].position.set(0, s[k].c[0], s[k].c[1]);
+            carrier[k].rotation.x = s[k].beta;
+          }
+        }
       },
       highlight(state) {
         if (isGhost) return;
@@ -337,6 +395,12 @@
     renderer.outputEncoding = THREE.sRGBEncoding;
     el.appendChild(renderer.domElement);
     scene = new THREE.Scene();
+    // Umgebungsbeleuchtung für Reflexe auf Kunststoff und Metall
+    if (THREE.RoomEnvironment) {
+      const pm = new THREE.PMREMGenerator(renderer);
+      scene.environment = pm.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+      pm.dispose();
+    }
     worldGroup = new THREE.Group();
     scene.add(worldGroup);
     camera = new THREE.PerspectiveCamera(40, 1, 5, 20000);
@@ -346,7 +410,7 @@
     controls.dampingFactor = 0.14;
     V.setView('iso');
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x6b7380, 0.75));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x6b7380, scene.environment ? 0.45 : 0.75));
     const dl = new THREE.DirectionalLight(0xffffff, 0.85);
     dl.position.set(350, -250, 900);
     dl.castShadow = true;
@@ -398,6 +462,8 @@
       worldGroup.add(l);
     }
 
+    // Steuerung (Arduino Uno + Braccio-Shield) neben der Basis; Kabel enden an ihren Steckern
+    if (BS.details) BS.details.buildController(worldGroup);
     V.rebuildRobot();
 
     // Spur

@@ -25,13 +25,15 @@
     let psi = p.psi;
     if (axis === 'psi') psi += dir * jogStep;
     else t[axis] += dir * jogStep;
-    const s = BS.kin.ikBest(t, psi, C.geom, cur);
-    if (!s) {
+    const r = BS.kin.cartMove(cur, t, psi, C.geom);
+    if (r.frac > 0) sim.setManual(r.m.slice(0, 4));
+    if (r.ok) return;
+    if (BS.kin.ikBest(t, psi, C.geom, cur))
+      BS.toast('Singularität: Weiterfahren erfordert einen Konfigurationswechsel (vorne/hinten) – kartesisch nicht stetig möglich. Bitte per PTP (Tab IK) umorientieren.', 'warn');
+    else {
       const any = BS.kin.ik(t, psi, C.geom, { m1: cur[0] }).find((x) => x.reachable);
       BS.toast(any ? 'Nicht zulässig: ' + any.reasons[0] : 'Außerhalb des Arbeitsraums', 'warn');
-      return;
     }
-    sim.setManual([s.m[0], s.m[1], s.m[2], s.m[3]]);
   }
 
   U.register('joints', {

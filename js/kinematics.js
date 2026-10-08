@@ -126,6 +126,60 @@
     return { J, sv, w, cond: sv[2] > 1e-9 ? sv[0] / sv[2] : Infinity };
   };
 
+  /**
+   * Greifergetriebe (Ebene y–z des Greiferflanschs):
+   * Servo M6 → Zahnrad R (Drehung Δ) kämmt mit Zahnrad L (−Δ, Übersetzung 1:1).
+   * Je Seite bildet die Kurbel am Zahnrad (g→c) mit Schwinge (a→r) und Fingerträger (c–r) ein Viergelenk.
+   * Lösung für Kurbeldrehung d: Lage des Koppelpunkts c, Schwingenwinkel und Drehung β des Fingerträgers.
+   */
+  function gripFourBar(g, a, c, r, p, d) {
+    const ang = (u) => Math.atan2(u[1], u[0]),
+      wrap = (x) => wrap180(x * R2D) * D2R;
+    const Lc = Math.hypot(c[0] - g[0], c[1] - g[1]),
+      Lr = Math.hypot(r[0] - a[0], r[1] - a[1]),
+      Lk = Math.hypot(r[0] - c[0], r[1] - c[1]);
+    const t = ang([c[0] - g[0], c[1] - g[1]]) + d;
+    const C2 = [g[0] + Lc * Math.cos(t), g[1] + Lc * Math.sin(t)];
+    // Schnitt der Kreise um a (Lr) und C2 (Lk), Zweig wie in der Ausgangslage
+    const dv = [C2[0] - a[0], C2[1] - a[1]],
+      D = Math.hypot(dv[0], dv[1]);
+    if (D > Lr + Lk || D < Math.abs(Lr - Lk) || D < 1e-9) return null;
+    const l = (Lr * Lr - Lk * Lk + D * D) / (2 * D),
+      h = Math.sqrt(Math.max(0, Lr * Lr - l * l));
+    const ex = [dv[0] / D, dv[1] / D];
+    const cross = (u, cc) => (u[0] - a[0]) * (cc[1] - a[1]) - (u[1] - a[1]) * (cc[0] - a[0]);
+    const side = Math.sign(cross(r, c));
+    let R2 = [a[0] + l * ex[0] - h * ex[1], a[1] + l * ex[1] + h * ex[0]];
+    if (Math.sign(cross(R2, C2)) !== side) R2 = [a[0] + l * ex[0] + h * ex[1], a[1] + l * ex[1] - h * ex[0]];
+    const rocker = wrap(ang([R2[0] - a[0], R2[1] - a[1]]) - ang([r[0] - a[0], r[1] - a[1]]));
+    const beta = wrap(ang([R2[0] - C2[0], R2[1] - C2[1]]) - ang([r[0] - c[0], r[1] - c[1]]));
+    const q = [p[0] - c[0], p[1] - c[1]];
+    const P = [C2[0] + q[0] * Math.cos(beta) - q[1] * Math.sin(beta), C2[1] + q[0] * Math.sin(beta) + q[1] * Math.cos(beta)];
+    return { crank: d, rocker, beta, c: C2, p: P };
+  }
+
+  /**
+   * Getriebestellung für eine Greiferöffnung jaw (mm, Abstand der Fingerinnenseiten an der Spitze).
+   * L = BS_MESHES.grip.link (Gelenkpunkte aus der STL-Geometrie). Δ = 0 entspricht der STL-Stellung.
+   */
+  kin.gripLinkage = function (L, jaw) {
+    const solve = (d) => {
+      const l = gripFourBar(L.gL, L.aL, L.cL, L.rL, L.pL, -d),
+        r = gripFourBar(L.gR, L.aR, L.cR, L.rR, L.pR, d);
+      return l && r ? { delta: d, L: l, R: r, gap: r.p[0] - l.p[0] } : null;
+    };
+    // Spalt fällt monoton mit Δ (Δ > 0 schließt) → Bisektion
+    let lo = -45 * D2R,
+      hi = 35 * D2R;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2,
+        s = solve(mid);
+      if (s && s.gap > jaw) lo = mid;
+      else hi = mid;
+    }
+    return solve((lo + hi) / 2) || solve(0);
+  };
+
   /** Punkte entlang der Armkette (für Kollisionsprüfung), nutzt Frames */
   kin.armPoints = function (F, g, jaw) {
     g = g || C.geom;
@@ -247,6 +301,68 @@
     if (cur) sols.sort((a, b) => jointDist(a.m, cur) - jointDist(b.m, cur));
     else sols.sort((a, b) => b.side - a.side || (b.elbowUp ? 1 : 0) - (a.elbowUp ? 1 : 0));
     return sols[0];
+  };
+
+  /** Max. Abstand des TCP von der Strecke p0→p1, wenn die Servos von q0 linear nach q1 fahren */
+  function jointPathDev(q0, q1, p0, p1, g) {
+    const ab = [p1.x - p0.x, p1.y - p0.y, p1.z - p0.z];
+    const L = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    let dev = 0;
+    for (const f of [0.25, 0.5, 0.75]) {
+      const p = kin.tcp(q0.map((v, i) => v + (q1[i] - v) * f), g);
+      const ap = [p.x - p0.x, p.y - p0.y, p.z - p0.z];
+      const u = L > 1e-12 ? BS.clamp((ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / L, 0, 1) : 0;
+      dev = Math.max(dev, Math.hypot(ap[0] - u * ab[0], ap[1] - u * ab[1], ap[2] - u * ab[2]));
+    }
+    return dev;
+  }
+
+  /**
+   * IK-Lösung, die stetig an die aktuelle Pose anschließt: nächstgelegene gültige Lösung, deren
+   * Gelenkraum-Übergang den TCP nicht von der Geraden abbringt. Ein Wechsel der Konfiguration
+   * (vorne/hinten, z. B. an der M1-Grenze 0°/180°) wird so erkannt und liefert null.
+   */
+  kin.ikStep = function (t, psi, g, cur, tol) {
+    g = g || C.geom;
+    const q0 = cur.slice(0, 4);
+    const p0 = kin.tcp(q0, g);
+    const len = Math.hypot(t.x - p0.x, t.y - p0.y, t.z - p0.z);
+    tol = tol != null ? tol : 0.5 + 0.25 * len;
+    const sols = kin.ik(t, psi, g, { m1: cur[0] }).filter((s) => s.valid);
+    sols.sort((a, b) => jointDist(a.m, q0) - jointDist(b.m, q0));
+    for (const s of sols) if (jointPathDev(q0, s.m, p0, t, g) <= tol) return s;
+    return null;
+  };
+
+  /**
+   * Kartesische Geradenbewegung von der Pose cur nach (t, ψ) mit Stetigkeitsprüfung.
+   * Die Strecke wird adaptiv unterteilt (nahe der Basisachse dreht M1 schnell → kleinere Schritte).
+   * Ist kein stetiger Übergang möglich (Konfigurationswechsel nötig), endet die Bewegung davor.
+   * Liefert {m, frac (erreichter Anteil 0..1), ok}.
+   */
+  kin.cartMove = function (cur, t, psi, g) {
+    g = g || C.geom;
+    const p0 = kin.tcp(cur, g);
+    const dpsi = wrap180(psi - p0.psi);
+    const total = Math.max(Math.hypot(t.x - p0.x, t.y - p0.y, t.z - p0.z), Math.abs(dpsi));
+    if (total < 1e-9) return { m: cur.slice(0, 4), frac: 1, ok: true };
+    const hMax = Math.min(1, 1 / total), // ≤ 1 mm bzw. 1° je Teilschritt
+      hMin = Math.min(1, 0.01 / total);
+    let q = cur.slice(0, 4),
+      a = 0,
+      h = hMax;
+    while (a < 1 - 1e-12) {
+      const b = Math.min(1, a + h);
+      const tb = { x: p0.x + (t.x - p0.x) * b, y: p0.y + (t.y - p0.y) * b, z: p0.z + (t.z - p0.z) * b };
+      const s = kin.ikStep(tb, p0.psi + dpsi * b, g, q);
+      if (s) {
+        q = s.m;
+        a = b;
+        h = Math.min(hMax, h * 2);
+      } else if (h > hMin) h /= 2;
+      else break;
+    }
+    return { m: q, frac: a, ok: a >= 1 - 1e-12 };
   };
 
   /** IK mit automatischer Wahl von ψ (möglichst nah am Wunschwinkel) */
