@@ -816,6 +816,31 @@
     pathLine.geometry.computeBoundingSphere();
   };
 
+  /** Punktwolke (z. B. Trainingsdaten oder Fehlerkarte): xyz = [x0,y0,z0, x1,…] in mm, rgb = [r0,g0,b0, …] (0…1, sRGB) */
+  let cloud = null;
+  V.setCloud = function (xyz, rgb, size) {
+    if (cloud) {
+      worldGroup.remove(cloud);
+      cloud.geometry.dispose();
+      cloud = null;
+    }
+    if (!xyz || !xyz.length) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(xyz, 3));
+    const col = new THREE.Color();
+    const lin = new Float32Array(rgb.length);
+    for (let i = 0; i < rgb.length; i += 3) {
+      col.setRGB(rgb[i], rgb[i + 1], rgb[i + 2]).convertSRGBToLinear();
+      lin[i] = col.r;
+      lin[i + 1] = col.g;
+      lin[i + 2] = col.b;
+    }
+    g.setAttribute('color', new THREE.Float32BufferAttribute(lin, 3));
+    cloud = new THREE.Points(g, new THREE.PointsMaterial({ size: size || 4, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false }));
+    cloud.renderOrder = 3;
+    worldGroup.add(cloud);
+  };
+
   V.clearTrace = function () {
     BS.sim.trace = [];
     BS.sim.traceDirty = true;

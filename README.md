@@ -25,6 +25,7 @@ Code, Wegpunkte, Zonen und Einstellungen werden im Browser gespeichert (localSto
 | **Arbeitsraum** | erreichbaren und unzulässigen Arbeitsraum als 2D-Schnitt und in 3D anzeigen; Sperrzonen und Arbeitsbereiche; Tisch- und Selbstkollision; Geschwindigkeitsgrenze; Reaktion *warnen / verlangsamen / Not-Halt*; Ereignisprotokoll |
 | **Pick'n'Place** | Szenarien: Einzelwürfel, Farbsortierung, Stapeln, Förderband mit Lichtschranken; Greifen, Ablegen, Stapeln; Kontrolle der Zielbereiche |
 | **Modell** | Geometrie anpassen, DH-Tabelle, Transformationsmatrizen T₀ⁱ, Servo-Parameter, Haltemomente, Export der Kinematik als MATLAB-Skript, Umschalten zwischen STL-Geometrie und vereinfachtem Modell |
+| **Machine Learning** | inverse Kinematik mit einem neuronalen Netz: Trainingsdaten in der Simulation erzeugen (Nennmodell oder „realer“ Roboter mit Fertigungsfehlern und Messrauschen), Netz konfigurieren und im Web Worker trainieren, Loss-Kurven, Fehlerstatistik, Histogramm und Fehlerkarte im 3D; Vergleich mit der analytischen IK, Verfeinerung per DLS, Kreisbahn abfahren; Modell als JSON oder Arduino-Header exportieren |
 
 Unten zeigt ein **Scope** Soll- und Ist-Werte der Gelenke sowie die TCP-Geschwindigkeit.
 Oben links blendet ein HUD TCP-Pose und Gelenkwinkel ein.
@@ -77,6 +78,21 @@ Die 3D-Darstellung nutzt die STL-Geometrie des Braccio (reduzierte Meshes in `js
 Die Meshes entsprechen den Visuals des MATLAB-Modells `Braccio_robot.mat` (`rigidBodyTree`, `*_reduced.stl`). Für die Darstellung werden die Normalen mit Kantenwinkel geglättet, Servos (schwarz) und Abtriebswellen (weiß) sind als eigene Teile abgetrennt. `js/details.js` ergänzt Achsbolzen, Basisschrauben, Gelenkstifte im Greifer, die Steuerung (Arduino Uno mit Braccio-Shield hinter der Basis) und die 3-adrigen Servokabel, die entlang des Arms zu den Steckern M1–M6 laufen und der Bewegung folgen. Die Zusatzteile sind rein visuell und gehen nicht in Kollisions- oder Arbeitsraumprüfung ein.
 Alle Servos auf 90° heißt: Arm steht senkrecht. M5 = 90° heißt: Die Greiferbacken öffnen quer zur Armebene.
 
+## Machine Learning: inverse Kinematik mit einem neuronalen Netz
+
+Das Netz lernt die Abbildung Zielpose (x, y, z, ψ) → Servowinkel M1–M4.
+
+- **Daten:** Die Trainingsdaten entstehen ohne IK-Formel.
+  - Zufällige Gelenkwinkel werden angefahren und die erreichte TCP-Pose „gemessen“ (Vorwärtskinematik). Alternativ werden Zielposen gleichverteilt im Arbeitsraum gezogen und über die analytische IK beschriftet.
+  - Eine Pose hat bis zu vier Lösungen (vorne/hinten × Ellbogen oben/unten). Deshalb wird auf die Konfiguration „vorne“ und eine Ellbogenlage eingeschränkt.
+  - Mit der Quelle *realer Roboter* kommen die verborgenen Gelenk-Offsets aus dem Tab *Kalibrierung* und Messrauschen dazu. Das Netz lernt dann die tatsächliche Kinematik, die die analytische IK des Nennmodells nicht kennt.
+- **Netz:** mehrschichtiges Perzeptron (Schichten frei wählbar, tanh/ReLU/Leaky ReLU), normierte Ein- und Ausgänge. Merkmale kartesisch (x, y, z, cos ψ, sin ψ) oder zylindrisch (r, cos φ, sin φ, z, cos ψ, sin ψ).
+- **Training:** Adam, Mini-Batches, konstante Lernrate oder Kosinus-Abfall, optional L2. Das Training läuft in einem Web Worker, auch bei `file://`.
+  - *Gelenkwinkel-Loss* (überwacht): mittlerer quadratischer Fehler der normierten Servowinkel.
+  - *Vorwärtskinematik-Loss* (selbstüberwacht): Fehler f(q̂) − p, Gradient über die Jacobi-Matrix (Jᵀ·e), dazu ein Strafterm für die Gelenkgrenzen. Braucht keine Labels und bleibt auch bei mehrdeutigen Daten eindeutig.
+- **Richtwerte:** Mit 20 000 Beispielen und einem Netz 6 → 64 → 64 → 4 liegt der mittlere Positionsfehler nach 80 Epochen unter 1 mm. Das Training dauert etwa eine halbe Minute.
+- **Export:** `nnIK(x, y, z, ψ, m)` als C-Header mit den Gewichten im Flash (PROGMEM). Ein Netz 6 → 32 → 32 → 4 belegt auf dem Uno rund 9 KB Flash.
+
 **Grenzen des Modells:**
 - Simuliert werden Kinematik und ein vereinfachtes Servo-Modell (PT1 mit Geschwindigkeitsbegrenzung), keine Mehrkörperdynamik.
 - Das Greifen ist vereinfacht: Würfel richten sich beim Schließen an den Backen aus.
@@ -95,5 +111,6 @@ js/arduino.js       Arduino→JavaScript-Übersetzer, Laufzeit, Beispielprogramm
 js/view3d.js        3D-Darstellung
 js/meshes.js        STL-Geometrie des Roboters (Base, Link 1–4, Greifer; Servos und Greifergetriebe als eigene Teile)
 js/details.js       Zusatzdetails der 3D-Darstellung (Schrauben, Steuerung, Servokabel)
+js/nn.js            Neuronales Netz: MLP, Backpropagation, Adam, FK-Loss, Web Worker, Export
 js/ui*.js           Oberfläche (je Bereich eine Datei)
 ```
