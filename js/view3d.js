@@ -9,6 +9,7 @@
     selected: null,
     ghostPose: null,
     ghostReason: '',
+    onSync: [], // Rückrufe nach jeder Synchronisation (z. B. Laborszene)
   });
 
   let renderer, scene, camera, controls, tctrl, container;
@@ -440,6 +441,10 @@
     grid.material.transparent = true;
     grid.material.opacity = 0.7;
     worldGroup.add(grid);
+    V.world = worldGroup;
+    V.grid = grid;
+    V.std = std;
+    V.mesh = mesh;
     // Weltachsen
     const axes = new THREE.Group();
     const arr = (dir, col, txt) => {
@@ -607,6 +612,7 @@
       wsPlane.rotation.set(0, 0, a);
     }
     if (wsHull) wsHull.visible = V.show.wsHull;
+    for (const fn of V.onSync) fn();
   };
 
   function syncObjects() {

@@ -113,7 +113,7 @@
   function play() {
     const sim = BS.sim;
     if (!plan || !plan.ok) return BS.toast('Keine gültige Trajektorie', 'warn');
-    if (sim.owner === 'program') return BS.toast('Programm läuft – bitte zuerst stoppen', 'warn');
+    if (sim.locked()) return BS.toast(sim.lockMsg(), 'warn');
     // Anfahrt zum ersten Wegpunkt
     const d = Math.max(...wps[0].m.map((v, i) => Math.abs(v - sim.cmd[i])));
     if (d > 0.5) {

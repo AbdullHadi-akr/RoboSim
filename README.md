@@ -25,6 +25,7 @@ Code, Wegpunkte, Zonen und Einstellungen werden im Browser gespeichert (localSto
 | **Arbeitsraum** | erreichbaren und unzulässigen Arbeitsraum als 2D-Schnitt und in 3D anzeigen; Sperrzonen und Arbeitsbereiche; Tisch- und Selbstkollision; Geschwindigkeitsgrenze; Reaktion *warnen / verlangsamen / Not-Halt*; Ereignisprotokoll |
 | **Pick'n'Place** | Szenarien: Einzelwürfel, Farbsortierung, Stapeln, Förderband mit Lichtschranken; Greifen, Ablegen, Stapeln; Kontrolle der Zielbereiche |
 | **Modell** | Geometrie anpassen, DH-Tabelle, Transformationsmatrizen T₀ⁱ, Servo-Parameter, Haltemomente, Export der Kinematik als MATLAB-Skript, Umschalten zwischen STL-Geometrie und vereinfachtem Modell |
+| **Labor Ü2** | Laborübung 2 (Simulink-Modell `Braccio_CtrlSimMdl.slx`) im Browser: MATLAB-Dateien der Übung bearbeiten und ausführen, Bedienpanel wie im Labor, IK-Designer, Blockparameter, Scope – siehe unten |
 
 Unten zeigt ein **Scope** Soll- und Ist-Werte der Gelenke sowie die TCP-Geschwindigkeit.
 Oben links blendet ein HUD TCP-Pose und Gelenkwinkel ein.
@@ -50,6 +51,33 @@ Förderband-Szenario: **D2** Lichtschranke unten (jede Box), **D4** Lichtschrank
 - `static` wird ignoriert.
 - Ganzzahl-Division ist nur bei der Initialisierung von `int`-Variablen exakt.
 - `Serial`-Eingaben liefern nichts.
+
+## Laborübung 2 (Reiter „Labor Ü2“)
+
+Der Reiter bildet die Übung `Labore/Uebung2_Braccio` nach: das Simulink-Modell `Braccio_CtrlSimMdl.slx` mit der Bibliothek `Braccio_lib.slx`, die Szene (Plattform, Pick-up-Marker, zwei Würfel, Hochregal, Sortierbox, virtuelle Wand) und die MATLAB-Dateien.
+
+- **MATLAB:** `Braccio_kinematics.m`, `Braccio_plotConfig.m` und `Braccio_plotSimResults.m` im Original, außerdem der Code der MATLAB-Function-Blöcke `ForwardKinematics`, `TeachIn/StoreWaypoints` und `CartesianPath/inverseKinematics3dof`.
+  - Alle Dateien lassen sich bearbeiten. Skripte laufen ganz oder abschnittsweise (Strg+Enter) in einem Basis-Workspace.
+  - Dazu gibt es Befehlsfenster, Workspace-Ansicht und Abbildungen (`figure`, `subplot`, `plot` …).
+  - `show(braccioRobot)` zeichnet die Körper-KS des `rigidBodyTree` als DH-Skelett ins 3D-Fenster.
+  - Prüfknöpfe vergleichen die DH-Parameter und die eigene Vorwärtskinematik mit der Referenz.
+- **Simulation:** feste Abtastzeit 10 ms, wie im Modell:
+  - Chart (Pause/Run/Notaus) → CtrlMode 1–5 (Slider, Push Buttons, Replay, Pick'n'Place, CartesianPath) → JointLimits → simpleDynamics (Ratenbegrenzer 1 rad/s) → ForwardKinematics → Arbeitsraumüberwachung.
+  - Die Blöcke rechnen mit dem bearbeiteten MATLAB-Code. Die Marker TCP, B und C zeigen dessen Ergebnis.
+  - Bei x ≤ `efence1_coord.x` leuchten die Wand und „Lim X“ rot.
+  - Nach dem Stoppen liegt `out` (ConfigSim, TCPpos, CtrlMode) im Workspace.
+- **Bedienpanel:** INIT, NOTAUS, RUN/PAUSE, Mode, Axis, TEACH-IN POSITION/RESET, −/+ und die Lampen wie in `Braccio_HMI.png`.
+- **IK-Designer:** Ersatz für den Inverse Kinematics Designer.
+  - Gelenke einstellen, „Store Configuration“, Abfolge abspielen.
+  - „Check Collisions“ prüft gegen die `collisionBox`-Objekte im Workspace, „Export“ legt `waypointData` (N×5, rad) an.
+- **Blockparameter:** Waypoints und TimePoints des Polynomial-Trajectory-Blocks, Greifer-Lookup-Tabelle, Ratenbegrenzung und weitere. Sie werden beim Start im Workspace ausgewertet.
+
+Koordinaten: Labor-KS0 in m mit x nach vorne. Im Simulator gilt x_sim = −y_lab, y_sim = x_lab.
+Gelenkwinkel: M1 = q1 + 90°, M2 = 180° − q2, M3 = 90° − q3, M4 = 180° − q4, M5 = q5 + 90°.
+Die Slider des Bedienpanels geben Servo-Winkel φ vor: q2 = φ2 + 90°, q4 = φ4 + 90°, sonst q = φ.
+
+Nicht nachgebildet: Unreal-Visualisierung, STL-Import (`stlread` & Co. haben keine Wirkung), Videoexport in `Braccio_plotSimResults.m`.
+Den Inhalt des Blocks `Replay` (Bibliothek `Braccio_lib_loesung`) enthält die Übung nicht. Er fährt hier die Teach-In-Posen mit Quintic-Polynomen im 2-s-Raster ab.
 
 ## Modell und Konvention
 
@@ -92,6 +120,9 @@ js/kinematics.js    DH, Vorwärts-/inverse Kinematik, Jacobi, Arbeitsraum, Kalib
 js/trajectory.js    Trajektorienplanung
 js/sim.js           Simulationskern: Zeit, Servos, Greifen, Objekte, Förderband, Überwachung
 js/arduino.js       Arduino→JavaScript-Übersetzer, Laufzeit, Beispielprogramme
+js/matlab.js        MATLAB-Interpreter (Teilmenge) für die Laborübung
+js/lab2.js          Laborübung 2: Simulink-Modell, Szene, IK-Designer
+js/lab2-files.js    Originaldateien der Übung (m-Skripte, Code der MATLAB-Function-Blöcke)
 js/view3d.js        3D-Darstellung
 js/meshes.js        STL-Geometrie des Roboters (Base, Link 1–4, Greifer; Servos und Greifergetriebe als eigene Teile)
 js/details.js       Zusatzdetails der 3D-Darstellung (Schrauben, Steuerung, Servokabel)

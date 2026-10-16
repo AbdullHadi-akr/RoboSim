@@ -610,6 +610,7 @@
     }
     const factory = window.__braccioSketch;
     if (sim.play) sim.stopMotion();
+    if (BS.lab2 && BS.lab2.running) BS.lab2.stop('Arduino-Programm gestartet');
     ard.running = true;
     ard.libStep = null;
     ard.t0 = sim.t;

@@ -25,14 +25,18 @@
     errMax: 6,
     compOn: false,
     comp: [0, 0, 0, 0, 0, 0],
-    // Bewegungsführung: 'manual' | 'program' | 'traj'
+    // Bewegungsführung: 'manual' | 'program' | 'traj' | 'lab' (Simulink-Modell der Laborübung)
     owner: 'manual',
+    directMask: null, // Gelenke, die ohne Servo-Modell direkt dem Sollwert folgen (Laborübung)
+    preStep: [], // Rückrufe vor jedem Simulationsschritt (dt)
     play: null, // laufende Trajektorie {plan, t0, loop, label}
     vScale: 1,
     estop: false,
     estopReason: '',
     pins: { out: {}, mode: {} },
     objects: [],
+    statics: [], // feste Quader {name, c:[x,y,z], s:[sx,sy,sz], color}, tragen Objekte
+    groundAt: null, // optionale Bodenhöhe (x, y) → z; sonst Tisch bei z = 0
     targets: [],
     zones: [],
     markers: [],
@@ -97,12 +101,15 @@
   sim.jawWidth = () => sim.jawFromAngle(sim.act[5]);
 
   sim.canManual = () => sim.owner === 'manual' || sim.owner === 'traj-manual';
+  /** Roboter wird von einem Programm oder dem Labormodell geführt */
+  sim.locked = () => sim.owner === 'program' || sim.owner === 'lab';
+  sim.lockMsg = () => (sim.owner === 'lab' ? 'Labormodell (Simulink) läuft – bitte zuerst stoppen' : 'Programm läuft – bitte zuerst stoppen');
 
   sim.setCmd = function (i, v) {
     sim.cmd[i] = v;
   };
   sim.setManual = function (m) {
-    if (sim.owner === 'program') return false;
+    if (sim.locked()) return false;
     if (sim.play) sim.stopMotion();
     for (let i = 0; i < m.length; i++) if (m[i] != null) sim.cmd[i] = m[i];
     return true;
@@ -112,8 +119,8 @@
   // Trajektorien abspielen (Bedienung, IK-Anfahren, Trajektorien-Tab)
   // ------------------------------------------------------------------
   sim.playPlan = function (plan, opts) {
-    if (sim.owner === 'program') {
-      BS.toast('Programm läuft – bitte zuerst stoppen', 'warn');
+    if (sim.locked()) {
+      BS.toast(sim.lockMsg(), 'warn');
       return false;
     }
     if (!plan || !plan.ok) return false;
@@ -208,6 +215,7 @@
     traceAcc = 0,
     lastTcp = null;
   function step(dt) {
+    for (const fn of sim.preStep) fn(dt);
     // 1) Trajektorie
     if (sim.play) {
       const P = sim.play;
@@ -244,6 +252,7 @@
       let v = BS.clamp(e / tau, -vm, vm);
       let next = sim.act[i] + v * dt;
       if ((target - next) * e < 0) next = target;
+      if (sim.directMask && sim.directMask[i]) next = target;
       if (i === 5 && next > gripLimit) next = Math.max(sim.act[5], Math.min(next, gripLimit));
       sim.vel[i] = (next - sim.act[i]) / dt;
       sim.act[i] = next;
@@ -399,9 +408,15 @@
     return Math.hypot(a.M[3] - b.M[3], a.M[7] - b.M[7]) < (ra + rb) * 0.75;
   }
   function supportHeight(o) {
-    let h = 0;
+    let h = sim.groundAt ? sim.groundAt(o.M[3], o.M[7]) : 0;
     const cv = sim.conveyor;
     if (cv && onBeltArea(o)) h = cv.height;
+    const bottom = o.M[11] - o.size[2] / 2;
+    for (const st of sim.statics) {
+      const top = st.c[2] + st.s[2] / 2;
+      if (top > bottom + 0.5) continue;
+      if (Math.abs(o.M[3] - st.c[0]) < st.s[0] / 2 + o.size[0] * 0.25 && Math.abs(o.M[7] - st.c[1]) < st.s[1] / 2 + o.size[1] * 0.25) h = Math.max(h, top);
+    }
     for (const b of sim.objects) {
       if (b === o || b.held) continue;
       // b trägt o, wenn b darunter liegt und sich die Grundflächen überlappen (o stapelt sich auf b)
@@ -515,11 +530,14 @@
     sortieren: { name: 'Farbsortierung (3 Würfel)' },
     stapeln: { name: 'Stapeln' },
     band: { name: 'Förderband mit Lichtschranken' },
+    labor2: { name: 'Labor Übung 2 (Simulink-Szene)' },
   };
   sim.loadScenario = function (key) {
     sim.releaseAll();
     sim.objects = [];
     sim.targets = [];
+    sim.statics = [];
+    sim.groundAt = null;
     sim.conveyor = null;
     sim.scenario = key;
     const T = (name, x, y, w, h, color, accept) => sim.targets.push({ id: sim.nextId++, name, x, y, w, h, color, accept });
@@ -562,6 +580,8 @@
       };
       T('Ablage klein', 230, 110, 100, 100, '#f76707', 'klein');
       T('Ablage groß', 170, 300, 120, 120, '#1c7ed6', 'groß');
+    } else if (key === 'labor2' && BS.lab2) {
+      BS.lab2.buildScenario();
     }
     BS.emit('objects');
     BS.emit('scenario');

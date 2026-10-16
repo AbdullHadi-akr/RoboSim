@@ -227,6 +227,7 @@
       txt = 'Manuell';
     if (sim.estop) (cls = 'pill err'), (txt = 'NOT-HALT');
     else if (sim.owner === 'program') (cls = 'pill run'), (txt = 'Programm läuft');
+    else if (sim.owner === 'lab') (cls = 'pill run'), (txt = 'Simulink · ' + (BS.lab2 ? BS.lab2.statusText() : ''));
     else if (sim.owner === 'traj') (cls = 'pill run'), (txt = sim.play ? sim.play.label : 'Trajektorie');
     if (sim.paused) txt += ' · pausiert';
     elStatus.className = cls;

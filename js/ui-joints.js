@@ -47,10 +47,10 @@
         const range = h('input', { type: 'range', min: lo, max: hi, step: 1, value: sim.cmd[i] });
         const num = U.num(sim.cmd[i], (v) => {
           const val = BS.clamp(Math.round(v), lo, hi);
-          if (!sim.setManual(Object.assign([], { [i]: val }))) BS.toast('Programm läuft – bitte zuerst stoppen', 'warn');
+          if (!sim.setManual(Object.assign([], { [i]: val }))) BS.toast(sim.lockMsg(), 'warn');
         }, { min: lo, max: hi, cls: 'w52' });
         range.addEventListener('input', () => {
-          if (!sim.setManual(Object.assign([], { [i]: +range.value }))) BS.toast('Programm läuft – bitte zuerst stoppen', 'warn');
+          if (!sim.setManual(Object.assign([], { [i]: +range.value }))) BS.toast(sim.lockMsg(), 'warn');
         });
         const ist = h('span', { class: 'jist' });
         jcard.appendChild(h('div', { class: 'jrow' }, h('span', { class: 'jname', style: { '--c': C.colors[i] } }, name), range, num, ist));
@@ -121,9 +121,11 @@
         ? ''
         : sim.owner === 'program'
           ? '<span class="warn">Arduino-Programm aktiv – Slider zeigen die Sollwerte des Programms.</span>'
+          : sim.owner === 'lab'
+            ? '<span class="warn">Simulink-Modell (Labor Ü2) aktiv – Slider zeigen die Sollwerte des Modells.</span>'
           : '<span class="warn">Trajektorie aktiv – „Stopp“ beendet sie.</span>';
       rows.forEach((r, i) => {
-        r.range.disabled = sim.owner === 'program';
+        r.range.disabled = sim.locked();
         if (document.activeElement !== r.range) r.range.value = sim.cmd[i];
         if (document.activeElement !== r.num) r.num.value = Math.round(sim.cmd[i] * 10) / 10;
         r.ist.textContent = 'Ist ' + sim.act[i].toFixed(1) + '°';
