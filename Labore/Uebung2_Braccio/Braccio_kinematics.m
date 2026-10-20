@@ -24,34 +24,34 @@ clc
 %------------- TODO ----------------------
 
 % Link 1 - Base
-braccio.d1      = 0;    % [m]
-braccio.a1      = 0;    % [m]
-braccio.alpha1  = 0;    % [rad]
-braccio.theta1  = 0;    % [rad]
+braccio.d1      = 0.0715;   % [m]
+braccio.a1      = 0;        % [m]
+braccio.alpha1  = pi/2;     % [rad]
+braccio.theta1  = 0;        % [rad]
 
 % Link 2 - Shoulder
-braccio.d2      = 0;    % [m]        
-braccio.a2      = 0;    % [m] 
-braccio.alpha2  = 0;    % [rad]
-braccio.theta2  = 0;    % [rad]
+braccio.d2      = 0;        % [m]
+braccio.a2      = 0.125;    % [m]
+braccio.alpha2  = 0;        % [rad]
+braccio.theta2  = pi/2;     % [rad]
 
 % Link 3 - Elbow
-braccio.d3      = 0;    % [m]
-braccio.a3      = 0;    % [m] 
-braccio.alpha3  = 0;    % [rad]
-braccio.theta3  = 0;    % [rad]
+braccio.d3      = 0;        % [m]
+braccio.a3      = 0.125;    % [m]
+braccio.alpha3  = 0;        % [rad]
+braccio.theta3  = 0;        % [rad]
 
 % Link 4 - Wrist
-braccio.d4      = 0;    % [m]
-braccio.a4      = 0;    % [m]
-braccio.alpha4  = 0;    % [rad]
-braccio.theta4  = 0;    % [rad]
+braccio.d4      = 0;        % [m]
+braccio.a4      = 0;        % [m]
+braccio.alpha4  = pi/2;     % [rad]
+braccio.theta4  = pi/2;     % [rad]
 
 % Link 5 - Wrist Rotation
-braccio.d5      = 0;    % [m]
-braccio.a5      = 0;    % [m]
-braccio.alpha5  = 0;    % [rad]
-braccio.theta5  = 0;    % [rad]
+braccio.d5      = 0.130;    % [m]
+braccio.a5      = 0;        % [m]
+braccio.alpha5  = 0;        % [rad]
+braccio.theta5  = 0;        % [rad]
 
 % -------------------------------------
 
@@ -236,7 +236,7 @@ box1_wall4.Pose = trvec2tform([-0.05 0.2 0.05-0.02]);
 %% E-Fences / Arbeitsraumbeschränkung
 
 % ----------- TODO ---------------------
-efence1_coord.x = -0.2;  
+efence1_coord.x = -0.2;     % [m] virtuelle Wand bei x = -200 mm
 % --------------------------------------
 efence1 = collisionBox(0.002,0.3,0.3);
 efence1.Pose = trvec2tform([efence1_coord.x 0 0.15]);
@@ -245,15 +245,34 @@ efence1.Pose = trvec2tform([efence1_coord.x 0 0.15]);
 %% Inverse Kinematics Designer
 
 inverseKinematicsDesigner("Braccio_iksession.mat")
- 
+
+
+%% Waypoints Pick-and-Place (entspricht dem Export aus dem IK Designer)
+% Zeilen = Posen (q1..q5 in rad), Zeitpunkte im Subsystem PickAndPlace: [0 2 3 4 6 7 9] s
+%   1  Default-Pose                         (t = 0 s)
+%   2  Greifen Würfel 1, TCP ~ (0.25|0|0.02)  (t = 2 s, Greifer schließt 2.2..2.8 s)
+%   3  wie 2 (Greifer schließt)             (t = 3 s)
+%   4  Anheben, TCP ~ (0.25|0|0.12)         (t = 4 s)
+%   5  über Sortierbox, TCP ~ (0|0.21|0.14) (t = 6 s, Greifer öffnet 6.2..6.8 s)
+%   6  wie 5 (Greifer öffnet)               (t = 7 s)
+%   7  zurück in die Default-Pose           (t = 9 s)
+waypointData = [ 0  90   0  90  0;
+                 0  47 -33   4  0;
+                 0  47 -33   4  0;
+                 0  70 -35   5  0;
+                90  93 -55   5  0;
+                90  93 -55   5  0;
+                 0  90   0  90  0]*pi/180;
 
 %% Bahn für Regal-Positionierung
+% Würfel 2 auf Aufnahme-Position 2 greifen (Werkzeug waagrecht), senkrecht am Regal
+% hochfahren, waagrecht aufs Regal (Position 3) schieben, ablegen und zurückfahren.
 cartesianPath.time = [0       2       4       6       8       10      12      14      16];
-cartesianPath.x =    [0.4     0.4     0.4     0.4     0.4     0.4     0.4     0.4     0.4]; % TODO: Hier müssen die x-Sollwerte passend zum Zeit-Vektor eingetragen werden
-cartesianPath.z =    [0.2     0.2     0.2     0.2     0.2     0.2     0.2     0.2     0.2]; % TODO: Hier müssen die z-Sollwerte passend zum Zeit-Vektor eingetragen werden
+cartesianPath.x =    [0.365   0.365   0.365   0.365   0.415   0.415   0.365   0.365   0.365]; % x-Sollwerte [m]
+cartesianPath.z =    [0.03    0.03    0.08    0.13    0.13    0.13    0.13    0.03    0.03]; % z-Sollwerte [m]
 cartesianPath.angle =[0       0       0       0       0       0       0       0       0]; % Soll-Winkelstellung
 cartesianPath.q6 =   [10      60      60      60      60      10      10      10      10]*pi/180; % Greifer Stellung
-cartesianPath.startConfig = [0 0 0 0 0 0]'*pi/180; % TODO: Via IK Designer ermittelte Anfangskonfiguration
+cartesianPath.startConfig = [0 29.38 -84.73 145.35 0 10]'*pi/180; % Anfangskonfiguration für x = 0.365 m, z = 0.03 m, angle = 0
 
 figure('name','Regal-Positionierung in kartesischen Koordinaten')
 subplot(3,2,1);
